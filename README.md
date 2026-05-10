@@ -24,18 +24,35 @@ step — just `pip install` and `python main.py`.
 git clone https://github.com/VanyaSvetoslav/auto-cs2.git
 cd auto-cs2
 pip install -r requirements.txt
+
+# Either drop a .env file with your key (preferred):
+cp .env.example .env
+# then edit .env and set STEAM_API_KEY=your_key_here
+
+# Or export it for this shell only:
 export STEAM_API_KEY=your_key_here   # https://steamcommunity.com/dev/apikey
+
 python main.py
 ```
 
 On Windows / PowerShell:
 
 ```powershell
+Copy-Item .env.example .env
+# edit .env and set STEAM_API_KEY=your_key_here
+python main.py
+
+# or, ad-hoc for the current shell:
 $env:STEAM_API_KEY = "your_key_here"
 python main.py
 ```
 
 Then open <http://localhost:8080> in your browser.
+
+`STEAM_API_KEY` is read from the process environment first; if it is not set,
+`main.py` falls back to a `.env` file next to it (loaded with
+[`python-dotenv`](https://pypi.org/project/python-dotenv/)). Real `.env` files
+are gitignored — only `.env.example` is committed.
 
 ## How it works
 
@@ -57,9 +74,13 @@ Then open <http://localhost:8080> in your browser.
   are deleted immediately afterwards. The `uploads/` directory is gitignored.
 - Max upload size is **300&nbsp;MB**.
 - The image proxy will only fetch from the official Steam avatar CDNs.
-- `STEAM_API_KEY` is read from the environment on startup. If it is missing,
-  the avatar endpoint will return a 500 with a hint, but everything else still
-  works.
+- `STEAM_API_KEY` is read from the process environment, with `.env` as a
+  fallback. If neither is set, the avatar endpoint returns a 500 with a hint,
+  but the demo parser still works.
+- The image proxy follows redirects manually (max 5 hops) and re-checks the
+  host against the whitelist on every hop, so an upstream redirect to
+  `127.0.0.1` / `169.254.169.254` / private RFC1918 ranges is rejected with
+  HTTP 400.
 
 ## License
 

@@ -9,7 +9,8 @@
 Run with:
 
     pip install -r requirements.txt
-    export STEAM_API_KEY=...        # https://steamcommunity.com/dev/apikey
+    # Either: export STEAM_API_KEY=...   (https://steamcommunity.com/dev/apikey)
+    # Or:     drop a .env file next to main.py with STEAM_API_KEY=...
     python main.py
 """
 
@@ -21,7 +22,6 @@ import os
 import re
 import secrets
 import sys
-import uuid
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -29,6 +29,7 @@ from urllib.parse import urlparse
 
 import httpx
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +39,9 @@ ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 UPLOAD_DIR = ROOT / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Load `.env` from the project root if present. Existing process env wins.
+load_dotenv(ROOT / ".env", override=False)
 
 STEAM_API_KEY = os.environ.get("STEAM_API_KEY", "").strip()
 MAX_DEMO_BYTES = 300 * 1024 * 1024  # 300 MB
@@ -57,6 +61,19 @@ PROFILES_RE = re.compile(
     r"steamcommunity\.com/profiles/(7656119\d{10})", re.IGNORECASE
 )
 VANITY_RE = re.compile(r"steamcommunity\.com/id/([A-Za-z0-9_-]+)", re.IGNORECASE)
+
+MAX_PROXY_REDIRECTS = 5
+
+
+def _is_allowed_image_host(host: str) -> bool:
+    """True if `host` is one of `ALLOWED_IMAGE_HOSTS` or a subdomain."""
+    if not host:
+        return False
+    h = host.lower().split(":", 1)[0]
+    if h in ALLOWED_IMAGE_HOSTS:
+        return True
+    return any(h.endswith("." + a) for a in ALLOWED_IMAGE_HOSTS)
+
 
 app = FastAPI(title="CS2 Toolkit", version="1.0.0")
 
@@ -235,22 +252,51 @@ async def proxy_image(url: str) -> Response:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(status_code=400, detail="Invalid URL")
 
-    host = parsed.netloc.lower()
-    allowed = host in ALLOWED_IMAGE_HOSTS or any(
-        host.endswith("." + h) or host == h for h in ALLOWED_IMAGE_HOSTS
-    )
-    if not allowed:
+    if not _is_allowed_image_host(parsed.netloc):
         raise HTTPException(status_code=400, detail="Host not allowed.")
 
-    async with httpx.AsyncClient() as client:
-        try:
-            r = await client.get(url, timeout=20.0, follow_redirects=True)
-            r.raise_for_status()
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=str(e)) from e
+    # Follow redirects manually so the host whitelist is re-checked on every
+    # hop. This blocks SSRF where an allowed Steam CDN host redirects to
+    # 127.0.0.1, 169.254.169.254 (cloud metadata), or any other internal
+    # address.
+    current_url = url
+    async with httpx.AsyncClient(follow_redirects=False) as client:
+        for _ in range(MAX_PROXY_REDIRECTS + 1):
+            try:
+                r = await client.get(current_url, timeout=20.0)
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=str(e)) from e
 
-    content_type = r.headers.get("content-type", "image/jpeg")
-    return Response(content=r.content, media_type=content_type)
+            if r.is_redirect:
+                next_url = r.headers.get("location", "")
+                if not next_url:
+                    raise HTTPException(
+                        status_code=502, detail="Redirect with no Location header."
+                    )
+                next_url = str(httpx.URL(current_url).join(next_url))
+                next_parsed = urlparse(next_url)
+                if next_parsed.scheme not in {"http", "https"}:
+                    raise HTTPException(
+                        status_code=502,
+                        detail="Redirect to unsupported scheme.",
+                    )
+                if not _is_allowed_image_host(next_parsed.netloc):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Redirect to non-allowed host blocked.",
+                    )
+                current_url = next_url
+                continue
+
+            try:
+                r.raise_for_status()
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=str(e)) from e
+
+            content_type = r.headers.get("content-type", "image/jpeg")
+            return Response(content=r.content, media_type=content_type)
+
+    raise HTTPException(status_code=502, detail="Too many redirects.")
 
 
 def _safe_str(value: Any) -> str:
