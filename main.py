@@ -645,16 +645,51 @@ def _port_in_use(host: str, port: int) -> bool:
     return False
 
 
+def _check_polars_cpu_compat() -> None:
+    """Print a friendly hint if `polars` (a `demoparser2` dependency) was
+    built for a CPU feature set this machine doesn't support.
+
+    `polars` raises a `RuntimeWarning` at import time when AVX2/FMA/BMI/etc.
+    are missing and then crashes with `SIGILL` later under load — too late
+    for a useful error message. Importing it here, while suppressing its
+    output, lets us replace the warning with an actionable one before any
+    `.dem` request is served.
+    """
+    import warnings as _w
+
+    with _w.catch_warnings(record=True) as records:
+        _w.simplefilter("always")
+        try:
+            import polars  # noqa: F401
+        except Exception:
+            # polars not installed — demo parse will fail with a normal
+            # ImportError, no need to confuse the user here.
+            return
+
+    incompatible = any(
+        "Missing required CPU features" in str(r.message) for r in records
+    )
+    if incompatible:
+        print(
+            "\n[!] polars detected missing CPU features (AVX2/FMA/BMI/LZCNT/MOVBE).\n"
+            "    The .dem parser will likely crash with SIGILL on this CPU.\n"
+            "    Fix:  pip install -U 'polars[rtcompat]'\n"
+            "    Or:   pip install polars-lts-cpu\n"
+            "    The /api/steam/avatars endpoint is unaffected and will work as-is.\n"
+        )
+
+
 def main() -> None:
     host, port = _resolve_host_port()
     display_host = "localhost" if host in {"0.0.0.0", "::"} else host
 
     if _port_in_use(host, port):
+        suggested = port + 1 if port < 65535 else 8081
         print(
             f"Port {port} on {host} is already in use. Free it or pick another:\n"
             f"  sudo ss -tlnp | grep ':{port}'\n"
             f"  sudo lsof -iTCP:{port} -sTCP:LISTEN -n -P\n"
-            f"  PORT={port + 1} python main.py"
+            f"  PORT={suggested} python main.py"
         )
         sys.exit(1)
 
@@ -667,6 +702,8 @@ def main() -> None:
         print("Steam API Key: NOT SET — avatar fetcher will return 500 errors.")
         print("  Get one at https://steamcommunity.com/dev/apikey, then either")
         print("  export STEAM_API_KEY=your_key_here   or put it in a `.env` file.")
+
+    _check_polars_cpu_compat()
 
     uvicorn.run(app, host=host, port=port, log_level="info")
 

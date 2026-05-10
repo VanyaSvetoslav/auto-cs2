@@ -62,14 +62,34 @@ file next to `main.py` (loaded with
 [`python-dotenv`](https://pypi.org/project/python-dotenv/)). Real `.env` files
 are gitignored — only `.env.example` is committed.
 
-If you see `[Errno 98] address already in use` on Linux, something else has
-the port. Find it and either kill it or pick a different port:
+### Troubleshooting
+
+**`[Errno 98] address already in use` on Linux** — something else has the
+port. Find it and either kill it or pick a different port:
 
 ```bash
 sudo ss -tlnp | grep ':8080'           # note: -t for TCP (-u is UDP only)
 sudo lsof -iTCP:8080 -sTCP:LISTEN -n -P
 PORT=8090 python main.py
 ```
+
+**`SIGILL` / `Illegal instruction` after uploading a `.dem`** — `demoparser2`
+pulls in `polars`, which by default ships an x86-64-v3 build that requires
+AVX2 / FMA / BMI1 / BMI2 / LZCNT / MOVBE. Older Intel/AMD CPUs and Python
+running under Rosetta on Apple Silicon don't have all of these. `polars` will
+print `Missing required CPU features` at startup and then segfault under load.
+
+Fix it by replacing `polars` with a build for legacy CPUs:
+
+```bash
+pip install -U "polars[rtcompat]"
+# or, the older official variant:
+# pip install polars-lts-cpu
+```
+
+`main.py` runs a `polars` probe at startup and prints the same hint if it
+detects this case, so you don't have to wait for the parser to crash to
+notice.
 
 ## How it works
 
