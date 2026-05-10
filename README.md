@@ -49,10 +49,27 @@ python main.py
 
 Then open <http://localhost:8080> in your browser.
 
-`STEAM_API_KEY` is read from the process environment first; if it is not set,
-`main.py` falls back to a `.env` file next to it (loaded with
+### Configuration
+
+| Env var | Default | Notes |
+| --- | --- | --- |
+| `STEAM_API_KEY` | _(unset)_ | Required for `/api/steam/avatars`. |
+| `HOST` | `0.0.0.0` | Bind interface. Use `127.0.0.1` to restrict to localhost. |
+| `PORT` | `8080` | Bind port. Override if `8080` is already taken. |
+
+All three are read from the process environment first and fall back to a `.env`
+file next to `main.py` (loaded with
 [`python-dotenv`](https://pypi.org/project/python-dotenv/)). Real `.env` files
 are gitignored — only `.env.example` is committed.
+
+If you see `[Errno 98] address already in use` on Linux, something else has
+the port. Find it and either kill it or pick a different port:
+
+```bash
+sudo ss -tlnp | grep ':8080'           # note: -t for TCP (-u is UDP only)
+sudo lsof -iTCP:8080 -sTCP:LISTEN -n -P
+PORT=8090 python main.py
+```
 
 ## How it works
 

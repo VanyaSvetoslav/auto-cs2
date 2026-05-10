@@ -12,15 +12,24 @@ Run with:
     # Either: export STEAM_API_KEY=...   (https://steamcommunity.com/dev/apikey)
     # Or:     drop a .env file next to main.py with STEAM_API_KEY=...
     python main.py
+
+Environment variables (also read from .env):
+
+    STEAM_API_KEY  Steam Web API key. Required for /api/steam/avatars.
+    HOST           Bind interface, default 0.0.0.0. Use 127.0.0.1 to
+                   restrict to localhost.
+    PORT           Bind port, default 8080.
 """
 
 from __future__ import annotations
 
 import asyncio
+import errno
 import math
 import os
 import re
 import secrets
+import socket
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -585,16 +594,81 @@ async def favicon() -> Response:
     return Response(status_code=204)
 
 
+def _resolve_host_port() -> tuple[str, int]:
+    host = os.environ.get("HOST", "0.0.0.0").strip() or "0.0.0.0"
+    port_raw = os.environ.get("PORT", "8080").strip() or "8080"
+    try:
+        port = int(port_raw)
+    except ValueError:
+        print(f"Invalid PORT={port_raw!r}; falling back to 8080.")
+        port = 8080
+    if not (0 < port < 65536):
+        print(f"PORT {port} out of range; falling back to 8080.")
+        port = 8080
+    return host, port
+
+
+def _port_in_use(host: str, port: int) -> bool:
+    """Return True if (host, port) cannot be bound right now."""
+    candidates: list[tuple[int, str]] = []
+    if host == "0.0.0.0":
+        candidates.append((socket.AF_INET, host))
+    elif host == "::":
+        candidates.append((socket.AF_INET6, host))
+    else:
+        try:
+            infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+            seen: set[tuple[int, str]] = set()
+            for info in infos:
+                key = (info[0], info[4][0])
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append(key)
+        except socket.gaierror:
+            return False
+
+    for family, addr in candidates:
+        try:
+            s = socket.socket(family, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind((addr, port))
+            except OSError as e:
+                if e.errno == errno.EADDRINUSE:
+                    return True
+                # Other errors (e.g. EACCES) — let uvicorn surface them.
+                return False
+            finally:
+                s.close()
+        except OSError:
+            continue
+    return False
+
+
 def main() -> None:
-    print("CS2 Toolkit running at http://localhost:8080")
+    host, port = _resolve_host_port()
+    display_host = "localhost" if host in {"0.0.0.0", "::"} else host
+
+    if _port_in_use(host, port):
+        print(
+            f"Port {port} on {host} is already in use. Free it or pick another:\n"
+            f"  sudo ss -tlnp | grep ':{port}'\n"
+            f"  sudo lsof -iTCP:{port} -sTCP:LISTEN -n -P\n"
+            f"  PORT={port + 1} python main.py"
+        )
+        sys.exit(1)
+
+    print(f"CS2 Toolkit running at http://{display_host}:{port}")
+    if host == "0.0.0.0":
+        print("  (bound to all interfaces — set HOST=127.0.0.1 to restrict to localhost)")
     if STEAM_API_KEY:
         print("Steam API Key: SET")
     else:
         print("Steam API Key: NOT SET — avatar fetcher will return 500 errors.")
-        print("  Get one at https://steamcommunity.com/dev/apikey and export it:")
-        print("    export STEAM_API_KEY=your_key_here")
+        print("  Get one at https://steamcommunity.com/dev/apikey, then either")
+        print("  export STEAM_API_KEY=your_key_here   or put it in a `.env` file.")
 
-    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":
