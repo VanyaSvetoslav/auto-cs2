@@ -75,13 +75,34 @@ MAX_PROXY_REDIRECTS = 5
 
 
 def _is_allowed_image_host(host: str) -> bool:
-    """True if `host` is one of `ALLOWED_IMAGE_HOSTS` or a subdomain."""
+    """True if `host` is one of `ALLOWED_IMAGE_HOSTS` or a subdomain.
+
+    Pass a hostname (e.g. ``urlparse(url).hostname``), not a netloc. A
+    netloc can include ``user:pass@host:port``; if a userinfo segment
+    happens to spell out an allowed CDN, ``netloc.split(":", 1)[0]``
+    would return that segment and the actual destination host would
+    silently bypass the whitelist. Stripping a port here is just a
+    defensive belt-and-braces in case a netloc slips through.
+    """
     if not host:
         return False
     h = host.lower().split(":", 1)[0]
     if h in ALLOWED_IMAGE_HOSTS:
         return True
     return any(h.endswith("." + a) for a in ALLOWED_IMAGE_HOSTS)
+
+
+def _redact_api_key(text: str) -> str:
+    """Replace the literal `STEAM_API_KEY` value with `<redacted>`.
+
+    httpx exceptions format the request URL into their string repr, and
+    Steam Web API calls pass the key as a `?key=...` query parameter, so
+    naive ``str(exc)`` echoes leak the key. Run anything derived from an
+    httpx error through this before logging or returning to a client.
+    """
+    if not STEAM_API_KEY or not text:
+        return text
+    return text.replace(STEAM_API_KEY, "<redacted>")
 
 
 app = FastAPI(title="CS2 Toolkit", version="1.0.0")
@@ -214,8 +235,16 @@ async def fetch_avatars(payload: AvatarRequest) -> JSONResponse:
         try:
             players = await _fetch_summaries(client, all_ids)
         except httpx.HTTPError as e:
+            # `str(e)` for httpx HTTPStatusError contains the full request
+            # URL, which we built with `?key=<STEAM_API_KEY>`. Echoing it
+            # back to the client (or printing it raw) would leak the key.
+            print(
+                f"Steam API request failed: {_redact_api_key(str(e))}",
+                file=sys.stderr,
+            )
             raise HTTPException(
-                status_code=502, detail=f"Steam API error: {e}"
+                status_code=502,
+                detail="Steam API request failed.",
             ) from e
 
     by_id = {p.get("steamid"): p for p in players}
@@ -258,10 +287,10 @@ async def proxy_image(url: str) -> Response:
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid URL") from e
 
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise HTTPException(status_code=400, detail="Invalid URL")
 
-    if not _is_allowed_image_host(parsed.netloc):
+    if not _is_allowed_image_host(parsed.hostname):
         raise HTTPException(status_code=400, detail="Host not allowed.")
 
     # Follow redirects manually so the host whitelist is re-checked on every
@@ -289,7 +318,7 @@ async def proxy_image(url: str) -> Response:
                         status_code=502,
                         detail="Redirect to unsupported scheme.",
                     )
-                if not _is_allowed_image_host(next_parsed.netloc):
+                if not _is_allowed_image_host(next_parsed.hostname or ""):
                     raise HTTPException(
                         status_code=400,
                         detail="Redirect to non-allowed host blocked.",
