@@ -609,7 +609,21 @@ def _resolve_host_port() -> tuple[str, int]:
 
 
 def _port_in_use(host: str, port: int) -> bool:
-    """Return True if (host, port) cannot be bound right now."""
+    """Return True if (host, port) cannot be bound right now.
+
+    Probes each address family that ``host`` resolves to and returns ``True``
+    only if at least one bind raised ``EADDRINUSE``. ``SO_REUSEADDR`` is set
+    on the probe socket to mirror uvicorn's own bind behavior, so we don't
+    false-positive on ``TIME_WAIT`` sockets after a recent restart.
+
+    Non-``EADDRINUSE`` errors (e.g. ``EACCES`` for a privileged port,
+    ``EAFNOSUPPORT`` when an address family isn't available) are intentionally
+    not surfaced here — we ``continue`` to the next candidate so a
+    multi-family host like ``localhost`` (which resolves to both ``::1`` and
+    ``127.0.0.1``) still gets a proper EADDRINUSE detection on the family
+    that *is* usable. If every candidate fails for non-EADDRINUSE reasons we
+    return ``False`` and let uvicorn report the underlying error.
+    """
     candidates: list[tuple[int, str]] = []
     if host == "0.0.0.0":
         candidates.append((socket.AF_INET, host))
@@ -636,8 +650,7 @@ def _port_in_use(host: str, port: int) -> bool:
             except OSError as e:
                 if e.errno == errno.EADDRINUSE:
                     return True
-                # Other errors (e.g. EACCES) — let uvicorn surface them.
-                return False
+                continue
             finally:
                 s.close()
         except OSError:
