@@ -84,6 +84,27 @@
         border-color: var(--accent);
         color: var(--accent);
       }
+      .btn-ghost:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn-ghost:disabled:hover {
+        border-color: var(--border);
+        color: var(--text);
+      }
+      .select {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.45rem 0.6rem;
+        font-size: 0.85rem;
+        font-family: "JetBrains Mono", monospace;
+      }
+      .select:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
       .tab {
         padding: 0.55rem 1.1rem;
         border-radius: 10px;
@@ -272,6 +293,17 @@ gaben"
               </button>
               <span id="avatar-status" class="text-sm" style="color: var(--muted)"></span>
             </div>
+            <div class="mt-3 pt-3 flex flex-wrap items-center gap-2 text-sm"
+                 style="border-top:1px solid var(--border)">
+              <span class="font-semibold" style="color:var(--muted)">Saved lists:</span>
+              <select id="lists-select" class="select" aria-label="Saved lists">
+                <option value="">— none saved —</option>
+              </select>
+              <button id="list-load" class="btn-ghost" disabled>Load</button>
+              <button id="list-save" class="btn-ghost">Save current as…</button>
+              <button id="list-delete" class="btn-ghost" disabled>Delete</button>
+              <span id="lists-status" class="text-sm ml-auto" style="color:var(--muted)"></span>
+            </div>
           </div>
 
           <div id="avatar-results" class="grid gap-4" style="
@@ -393,6 +425,14 @@ gaben"
           (p.steamid
             ? `https://steamcommunity.com/profiles/${p.steamid}`
             : "#");
+        const dlAttrs = p.avatarfull
+          ? `data-url="${escapeHtml(p.avatarfull)}" data-name="${escapeHtml(
+              `${safeFilename(p.personaname || "player")}_${p.steamid || "unknown"}.jpg`
+            )}"`
+          : "";
+        const dlBtn = p.avatarfull
+          ? `<button class="btn-ghost dl-avatar" ${dlAttrs}>Download</button>`
+          : `<button class="btn-ghost" disabled>Download</button>`;
         return `
           <div class="panel p-3 flex flex-col gap-2"
                style="cursor:${p.steamid ? "pointer" : "default"}"
@@ -401,17 +441,36 @@ gaben"
             <div class="font-semibold truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
             <div class="mono text-xs truncate" style="color:var(--muted)"
                  title="${escapeHtml(p.steamid || "")}">${escapeHtml(p.steamid || "—")}</div>
-            <button class="btn-ghost copy-id mt-1" data-id="${escapeHtml(p.steamid || "")}">
-              Copy SteamID
-            </button>
+            <div class="flex gap-1 mt-1">
+              <button class="btn-ghost copy-id flex-1" data-id="${escapeHtml(p.steamid || "")}">
+                Copy SteamID
+              </button>
+              ${dlBtn}
+            </div>
           </div>
         `;
+      }
+
+      async function downloadOneAvatar(url, filename) {
+        const proxied = "/api/proxy/image?url=" + encodeURIComponent(url);
+        const r = await fetch(proxied);
+        if (!r.ok) throw new Error("proxy " + r.status);
+        const blob = await r.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = filename || "avatar.jpg";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
       }
 
       function bindCardClicks() {
         resultsEl.querySelectorAll("[data-profile]").forEach((el) => {
           el.addEventListener("click", (ev) => {
             if (ev.target.closest(".copy-id")) return;
+            if (ev.target.closest(".dl-avatar")) return;
             const url = el.getAttribute("data-profile");
             if (url && url !== "#") window.open(url, "_blank", "noopener");
           });
@@ -429,7 +488,138 @@ gaben"
             }
           });
         });
+        resultsEl.querySelectorAll(".dl-avatar").forEach((b) => {
+          b.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const url = b.getAttribute("data-url");
+            const name = b.getAttribute("data-name");
+            if (!url) return;
+            const original = b.textContent;
+            b.disabled = true;
+            b.textContent = "…";
+            try {
+              await downloadOneAvatar(url, name);
+              toast("Downloaded " + name);
+            } catch (err) {
+              toast("Download failed: " + err.message);
+            } finally {
+              b.disabled = false;
+              b.textContent = original;
+            }
+          });
+        });
       }
+
+      // ============ Saved lists (localStorage) ============
+      const LISTS_KEY = "cs2-toolkit:avatar-lists:v1";
+      const listsSelect = document.getElementById("lists-select");
+      const listLoadBtn = document.getElementById("list-load");
+      const listSaveBtn = document.getElementById("list-save");
+      const listDeleteBtn = document.getElementById("list-delete");
+      const listsStatus = document.getElementById("lists-status");
+
+      function getLists() {
+        try {
+          const raw = localStorage.getItem(LISTS_KEY);
+          if (!raw) return {};
+          const obj = JSON.parse(raw);
+          return obj && typeof obj === "object" ? obj : {};
+        } catch {
+          return {};
+        }
+      }
+
+      function setLists(obj) {
+        try {
+          localStorage.setItem(LISTS_KEY, JSON.stringify(obj));
+        } catch (e) {
+          toast("Could not save: " + e.message);
+        }
+      }
+
+      function refreshListsSelect(preselect) {
+        const lists = getLists();
+        const names = Object.keys(lists).sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" })
+        );
+        const current = preselect ?? listsSelect.value;
+        listsSelect.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = names.length
+          ? "— pick a list —"
+          : "— none saved —";
+        listsSelect.appendChild(placeholder);
+        for (const name of names) {
+          const opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = name;
+          listsSelect.appendChild(opt);
+        }
+        if (current && names.includes(current)) {
+          listsSelect.value = current;
+        } else {
+          listsSelect.value = "";
+        }
+        const has = !!listsSelect.value;
+        listLoadBtn.disabled = !has;
+        listDeleteBtn.disabled = !has;
+        listsStatus.textContent = names.length
+          ? `${names.length} saved`
+          : "";
+      }
+
+      listsSelect.addEventListener("change", () => {
+        const has = !!listsSelect.value;
+        listLoadBtn.disabled = !has;
+        listDeleteBtn.disabled = !has;
+      });
+
+      listLoadBtn.addEventListener("click", () => {
+        const name = listsSelect.value;
+        if (!name) return;
+        const lists = getLists();
+        const entry = lists[name];
+        if (!entry) {
+          toast("List not found");
+          refreshListsSelect();
+          return;
+        }
+        avatarInput.value = entry.input || "";
+        toast(`Loaded "${name}"`);
+      });
+
+      listSaveBtn.addEventListener("click", () => {
+        const text = avatarInput.value.trim();
+        if (!text) {
+          toast("Nothing to save — paste IDs first");
+          return;
+        }
+        const lists = getLists();
+        const suggested = listsSelect.value || "";
+        const name = (window.prompt("Save list as:", suggested) || "").trim();
+        if (!name) return;
+        if (lists[name]) {
+          if (!window.confirm(`"${name}" already exists. Overwrite?`)) return;
+        }
+        lists[name] = { input: text, savedAt: new Date().toISOString() };
+        setLists(lists);
+        refreshListsSelect(name);
+        toast(`Saved "${name}"`);
+      });
+
+      listDeleteBtn.addEventListener("click", () => {
+        const name = listsSelect.value;
+        if (!name) return;
+        if (!window.confirm(`Delete "${name}"?`)) return;
+        const lists = getLists();
+        delete lists[name];
+        setLists(lists);
+        refreshListsSelect("");
+        toast(`Deleted "${name}"`);
+      });
+
+      refreshListsSelect();
 
       fetchBtn.addEventListener("click", async () => {
         const text = avatarInput.value.trim();
