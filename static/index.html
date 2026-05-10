@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CS2 Toolkit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0f0f0f;
+        --panel: #1a1a2e;
+        --panel-2: #20203a;
+        --border: #2a2a44;
+        --accent: #00ff88;
+        --accent-dim: #00cc6e;
+        --text: #e6e6e6;
+        --muted: #8a8aa0;
+        --danger: #ff4d6d;
+      }
+      html,
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Inter", system-ui, sans-serif;
+        min-height: 100vh;
+      }
+      body {
+        background-image:
+          radial-gradient(
+            circle at 20% -10%,
+            rgba(0, 255, 136, 0.06),
+            transparent 40%
+          ),
+          radial-gradient(
+            circle at 110% 110%,
+            rgba(0, 255, 136, 0.04),
+            transparent 50%
+          ),
+          linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        background-size:
+          auto,
+          auto,
+          24px 24px,
+          24px 24px;
+      }
+      .mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+      }
+      .btn {
+        background: var(--accent);
+        color: #001a0d;
+        font-weight: 600;
+        border-radius: 10px;
+        padding: 0.6rem 1rem;
+        transition: filter 0.15s ease;
+      }
+      .btn:hover:not(:disabled) {
+        filter: brightness(1.1);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn-ghost {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 0.45rem 0.8rem;
+        font-size: 0.85rem;
+      }
+      .btn-ghost:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .tab {
+        padding: 0.55rem 1.1rem;
+        border-radius: 10px;
+        cursor: pointer;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .tab.active {
+        background: var(--panel-2);
+        color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--border);
+      }
+      textarea,
+      input[type="text"] {
+        background: #11111d;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.75rem 0.9rem;
+        width: 100%;
+        outline: none;
+      }
+      textarea:focus,
+      input[type="text"]:focus {
+        border-color: var(--accent);
+      }
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        display: inline-block;
+        vertical-align: -3px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .drop {
+        border: 2px dashed var(--border);
+        border-radius: 14px;
+        padding: 2.5rem 1rem;
+        text-align: center;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+      .drop.hover {
+        border-color: var(--accent);
+        background: rgba(0, 255, 136, 0.05);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 0.55rem 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.9rem;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.1rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+      .badge-ct {
+        background: rgba(64, 156, 255, 0.18);
+        color: #6cb1ff;
+      }
+      .badge-t {
+        background: rgba(255, 176, 64, 0.18);
+        color: #ffb84a;
+      }
+      .badge-muted {
+        background: rgba(138, 138, 160, 0.15);
+        color: var(--muted);
+      }
+      details > summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 0.6rem 0;
+        font-weight: 600;
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+      details > summary::before {
+        content: "▸";
+        display: inline-block;
+        margin-right: 0.5rem;
+        transition: transform 0.15s ease;
+        color: var(--accent);
+      }
+      details[open] > summary::before {
+        transform: rotate(90deg);
+      }
+      .toast {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 0.6rem 0.9rem;
+        border-radius: 10px;
+        font-size: 0.85rem;
+        z-index: 50;
+        opacity: 0;
+        transform: translateY(8px);
+        transition:
+          opacity 0.2s ease,
+          transform 0.2s ease;
+        pointer-events: none;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="max-w-6xl mx-auto px-4 py-8">
+      <header class="flex items-center justify-between flex-wrap gap-4 mb-6">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+            style="background: var(--panel-2); border: 1px solid var(--border)"
+          >
+            <span style="color: var(--accent)">&#9876;</span>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold tracking-tight">CS2 Toolkit</h1>
+            <p class="text-xs" style="color: var(--muted)">
+              Local utilities for Counter-Strike 2: avatars &amp; demo parsing.
+            </p>
+          </div>
+        </div>
+        <div class="flex gap-2 panel p-1">
+          <button class="tab active" data-tab="avatars" id="tab-avatars">
+            Avatar Fetcher
+          </button>
+          <button class="tab" data-tab="demo" id="tab-demo">.dem Multitool</button>
+        </div>
+      </header>
+
+      <main>
+        <!-- =================== Avatar Fetcher =================== -->
+        <section id="panel-avatars" class="space-y-4">
+          <div class="panel p-5">
+            <label class="block mb-2 text-sm font-semibold">
+              SteamIDs, profile URLs, or vanity names
+            </label>
+            <textarea
+              id="steam-input"
+              rows="6"
+              class="mono text-sm"
+              placeholder="One per line, comma, or space separated.
+e.g.
+76561198012345678
+https://steamcommunity.com/profiles/76561198012345678
+https://steamcommunity.com/id/gaben
+gaben"
+            ></textarea>
+            <div class="mt-3 flex flex-wrap items-center gap-3">
+              <button id="fetch-avatars" class="btn">Fetch Avatars</button>
+              <button id="download-zip" class="btn-ghost" disabled>
+                Download All as ZIP
+              </button>
+              <span id="avatar-status" class="text-sm" style="color: var(--muted)"></span>
+            </div>
+          </div>
+
+          <div id="avatar-results" class="grid gap-4" style="
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+          "></div>
+        </section>
+
+        <!-- =================== .dem Multitool =================== -->
+        <section id="panel-demo" class="space-y-4 hidden">
+          <div class="panel p-5">
+            <div id="drop" class="drop">
+              <div class="text-3xl mb-2" style="color: var(--accent)">&#8682;</div>
+              <div class="font-semibold">Drop a .dem file here</div>
+              <div class="text-sm mt-1" style="color: var(--muted)">
+                or click to browse &middot; max 300&nbsp;MB &middot; processed
+                locally &amp; deleted after parsing
+              </div>
+              <input
+                id="demo-input"
+                type="file"
+                accept=".dem"
+                class="hidden"
+              />
+            </div>
+            <div id="demo-meta" class="hidden mt-3 text-sm flex items-center gap-3">
+              <span
+                class="badge badge-muted mono"
+                id="demo-name"
+              ></span>
+              <span style="color: var(--muted)" id="demo-size"></span>
+              <button id="demo-clear" class="btn-ghost">Remove</button>
+            </div>
+            <div class="mt-4 flex items-center gap-3">
+              <button id="parse-demo" class="btn" disabled>Parse Demo</button>
+              <span
+                id="demo-status"
+                class="text-sm"
+                style="color: var(--muted)"
+              ></span>
+            </div>
+          </div>
+
+          <div id="demo-results" class="space-y-4 hidden"></div>
+        </section>
+      </main>
+
+      <footer class="mt-12 text-xs text-center" style="color: var(--muted)">
+        Runs locally. No telemetry. .dem files are deleted from disk
+        immediately after parsing.
+      </footer>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+      // ============ Tabs ============
+      const tabs = document.querySelectorAll(".tab");
+      const panels = {
+        avatars: document.getElementById("panel-avatars"),
+        demo: document.getElementById("panel-demo"),
+      };
+      tabs.forEach((t) => {
+        t.addEventListener("click", () => {
+          tabs.forEach((x) => x.classList.remove("active"));
+          t.classList.add("active");
+          for (const k of Object.keys(panels)) {
+            panels[k].classList.toggle("hidden", k !== t.dataset.tab);
+          }
+        });
+      });
+
+      // ============ Toast ============
+      const toastEl = document.getElementById("toast");
+      let toastTimer = null;
+      function toast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add("show");
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
+      }
+
+      function escapeHtml(s) {
+        return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c]);
+      }
+
+      function safeFilename(s) {
+        return String(s || "player")
+          .replace(/[^A-Za-z0-9._-]+/g, "_")
+          .slice(0, 60) || "player";
+      }
+
+      // ============ Avatar Fetcher ============
+      const avatarInput = document.getElementById("steam-input");
+      const fetchBtn = document.getElementById("fetch-avatars");
+      const zipBtn = document.getElementById("download-zip");
+      const statusEl = document.getElementById("avatar-status");
+      const resultsEl = document.getElementById("avatar-results");
+
+      let lastResults = [];
+
+      function renderAvatarCard(p) {
+        const avatar = p.avatarfull
+          ? `<img src="${escapeHtml(p.avatarfull)}" alt="" loading="lazy"
+                  style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;background:#0a0a14"
+                  onerror="this.style.opacity=0.2" />`
+          : `<div style="width:100%;aspect-ratio:1/1;border-radius:10px;background:#0a0a14;
+                        display:flex;align-items:center;justify-content:center;color:var(--muted)">
+               no avatar
+             </div>`;
+        const name = p.personaname || (p.error ? "(unavailable)" : "(unknown)");
+        const profile =
+          p.profileurl ||
+          (p.steamid
+            ? `https://steamcommunity.com/profiles/${p.steamid}`
+            : "#");
+        return `
+          <div class="panel p-3 flex flex-col gap-2"
+               style="cursor:${p.steamid ? "pointer" : "default"}"
+               data-profile="${escapeHtml(profile)}">
+            ${avatar}
+            <div class="font-semibold truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+            <div class="mono text-xs truncate" style="color:var(--muted)"
+                 title="${escapeHtml(p.steamid || "")}">${escapeHtml(p.steamid || "—")}</div>
+            <button class="btn-ghost copy-id mt-1" data-id="${escapeHtml(p.steamid || "")}">
+              Copy SteamID
+            </button>
+          </div>
+        `;
+      }
+
+      function bindCardClicks() {
+        resultsEl.querySelectorAll("[data-profile]").forEach((el) => {
+          el.addEventListener("click", (ev) => {
+            if (ev.target.closest(".copy-id")) return;
+            const url = el.getAttribute("data-profile");
+            if (url && url !== "#") window.open(url, "_blank", "noopener");
+          });
+        });
+        resultsEl.querySelectorAll(".copy-id").forEach((b) => {
+          b.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const id = b.getAttribute("data-id");
+            if (!id) return;
+            try {
+              await navigator.clipboard.writeText(id);
+              toast("SteamID copied");
+            } catch {
+              toast("Copy failed");
+            }
+          });
+        });
+      }
+
+      fetchBtn.addEventListener("click", async () => {
+        const text = avatarInput.value.trim();
+        if (!text) {
+          toast("Paste at least one SteamID or vanity URL");
+          return;
+        }
+        fetchBtn.disabled = true;
+        zipBtn.disabled = true;
+        resultsEl.innerHTML = "";
+        lastResults = [];
+        statusEl.innerHTML = `<span class="spinner"></span> Resolving…`;
+        try {
+          const res = await fetch("/api/steam/avatars", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: text }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          lastResults = data.results || [];
+          if (!lastResults.length) {
+            statusEl.textContent = "No results.";
+          } else {
+            const have = lastResults.filter((p) => p.avatarfull).length;
+            const unresolved = (data.unresolved_vanities || []).length;
+            statusEl.textContent =
+              `${have}/${lastResults.length} avatars` +
+              (unresolved
+                ? ` · ${unresolved} vanity name(s) not found`
+                : "");
+          }
+          resultsEl.innerHTML = lastResults.map(renderAvatarCard).join("");
+          bindCardClicks();
+          zipBtn.disabled = !lastResults.some((p) => p.avatarfull);
+        } catch (err) {
+          statusEl.innerHTML =
+            `<span style="color:var(--danger)">${escapeHtml(err.message)}</span>`;
+        } finally {
+          fetchBtn.disabled = false;
+        }
+      });
+
+      zipBtn.addEventListener("click", async () => {
+        const items = lastResults.filter((p) => p.avatarfull);
+        if (!items.length) return;
+        zipBtn.disabled = true;
+        const zip = new JSZip();
+        let done = 0;
+        statusEl.innerHTML = `<span class="spinner"></span> Fetching 0/${items.length}…`;
+        for (const p of items) {
+          try {
+            const proxied =
+              "/api/proxy/image?url=" + encodeURIComponent(p.avatarfull);
+            const r = await fetch(proxied);
+            if (!r.ok) throw new Error("proxy " + r.status);
+            const blob = await r.blob();
+            const name =
+              `${safeFilename(p.personaname || "player")}_${p.steamid}.jpg`;
+            zip.file(name, blob);
+          } catch (e) {
+            console.warn("skip", p.steamid, e);
+          }
+          done++;
+          statusEl.innerHTML =
+            `<span class="spinner"></span> Fetching ${done}/${items.length}…`;
+        }
+        const blob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `cs2-avatars-${Date.now()}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        statusEl.textContent = `ZIP ready (${items.length} avatars)`;
+        zipBtn.disabled = false;
+      });
+
+      // ============ .dem Multitool ============
+      const dropEl = document.getElementById("drop");
+      const fileInput = document.getElementById("demo-input");
+      const demoMeta = document.getElementById("demo-meta");
+      const demoNameEl = document.getElementById("demo-name");
+      const demoSizeEl = document.getElementById("demo-size");
+      const demoClearBtn = document.getElementById("demo-clear");
+      const parseBtn = document.getElementById("parse-demo");
+      const demoStatus = document.getElementById("demo-status");
+      const demoResults = document.getElementById("demo-results");
+
+      let selectedFile = null;
+
+      function fmtBytes(n) {
+        if (n < 1024) return n + " B";
+        if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+        return (n / 1024 / 1024).toFixed(1) + " MB";
+      }
+
+      function setSelected(file) {
+        if (!file) {
+          selectedFile = null;
+          demoMeta.classList.add("hidden");
+          parseBtn.disabled = true;
+          fileInput.value = "";
+          return;
+        }
+        if (!file.name.toLowerCase().endsWith(".dem")) {
+          toast("Please select a .dem file");
+          return;
+        }
+        if (file.size > 300 * 1024 * 1024) {
+          toast("File too large (max 300 MB)");
+          return;
+        }
+        selectedFile = file;
+        demoNameEl.textContent = file.name;
+        demoSizeEl.textContent = fmtBytes(file.size);
+        demoMeta.classList.remove("hidden");
+        parseBtn.disabled = false;
+      }
+
+      dropEl.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files && fileInput.files[0]) setSelected(fileInput.files[0]);
+      });
+      ["dragenter", "dragover"].forEach((ev) =>
+        dropEl.addEventListener(ev, (e) => {
+          e.preventDefault();
+          dropEl.classList.add("hover");
+        })
+      );
+      ["dragleave", "drop"].forEach((ev) =>
+        dropEl.addEventListener(ev, (e) => {
+          e.preventDefault();
+          dropEl.classList.remove("hover");
+        })
+      );
+      dropEl.addEventListener("drop", (e) => {
+        const f = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) setSelected(f);
+      });
+      demoClearBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setSelected(null);
+        demoResults.classList.add("hidden");
+        demoResults.innerHTML = "";
+      });
+
+      function teamBadge(team) {
+        const t = (team || "").toUpperCase();
+        if (t === "CT") return `<span class="badge badge-ct">CT</span>`;
+        if (t === "T" || t === "TERRORIST")
+          return `<span class="badge badge-t">T</span>`;
+        return `<span class="badge badge-muted">${escapeHtml(team || "—")}</span>`;
+      }
+
+      function renderDemoResults(d) {
+        const m = d.match_result || {};
+        const winnerLabel =
+          m.winner_side === "CT"
+            ? "CT Wins!"
+            : m.winner_side === "T"
+              ? "T Wins!"
+              : m.winner_side === "DRAW"
+                ? "Draw"
+                : "—";
+
+        const headerEntries = Object.entries(d.header || {})
+          .filter(([k, v]) => v !== "" && v !== null && v !== undefined)
+          .map(
+            ([k, v]) =>
+              `<div class="flex justify-between gap-3 py-1 border-b" style="border-color:var(--border)">
+                 <span style="color:var(--muted)">${escapeHtml(k)}</span>
+                 <span class="mono text-right">${escapeHtml(v)}</span>
+               </div>`
+          )
+          .join("");
+
+        const rows = (d.players || [])
+          .map((p) => {
+            const code = p.crosshair_code || "";
+            const codeCell = code
+              ? `<div class="flex items-center gap-2">
+                   <span class="mono text-xs">${escapeHtml(code)}</span>
+                   <button class="btn-ghost copy-code" data-code="${escapeHtml(code)}">Copy</button>
+                 </div>`
+              : `<span style="color:var(--muted)">—</span>`;
+            const avatarSlot = p.steamid
+              ? `<div class="avatar-slot mono text-[10px]" data-sid="${escapeHtml(p.steamid)}"
+                       style="width:28px;height:28px;border-radius:6px;background:#0a0a14;
+                              display:inline-flex;align-items:center;justify-content:center;
+                              color:var(--muted);overflow:hidden;flex:none">…</div>`
+              : "";
+            return `<tr>
+              <td>
+                <div class="flex items-center gap-2">
+                  ${avatarSlot}
+                  <div>
+                    <div class="font-semibold">${escapeHtml(p.name || "—")}</div>
+                    <div class="mono text-[11px]" style="color:var(--muted)">${escapeHtml(p.steamid || "")}</div>
+                  </div>
+                </div>
+              </td>
+              <td>${teamBadge(p.team)}</td>
+              <td class="mono">${escapeHtml(p.kills ?? 0)}</td>
+              <td class="mono">${escapeHtml(p.deaths ?? 0)}</td>
+              <td>${codeCell}</td>
+            </tr>`;
+          })
+          .join("");
+
+        demoResults.innerHTML = `
+          <div class="panel p-5">
+            <div class="text-xs uppercase tracking-wider mb-1"
+                 style="color:var(--muted)">Match Result</div>
+            <div class="text-3xl font-extrabold tracking-tight">
+              <span style="color:#6cb1ff">CT ${m.ct_wins ?? 0}</span>
+              <span style="color:var(--muted)" class="mx-2">—</span>
+              <span style="color:#ffb84a">T ${m.t_wins ?? 0}</span>
+              <span class="ml-3" style="color:var(--accent)">${escapeHtml(winnerLabel)}</span>
+            </div>
+            <div class="text-sm mt-1" style="color:var(--muted)">
+              ${m.total_rounds ?? 0} rounds played
+            </div>
+          </div>
+
+          <div class="panel p-5">
+            <details open>
+              <summary>Match Info</summary>
+              <div class="mt-2 text-sm">${headerEntries || `<span style="color:var(--muted)">No header info.</span>`}</div>
+            </details>
+          </div>
+
+          <div class="panel p-5">
+            <details open>
+              <summary>Players (${(d.players || []).length})</summary>
+              <div class="mt-2 overflow-x-auto">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>Team</th>
+                      <th>K</th>
+                      <th>D</th>
+                      <th>Crosshair Code</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows || `<tr><td colspan="5" style="color:var(--muted)">No players found.</td></tr>`}</tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        `;
+        demoResults.classList.remove("hidden");
+
+        demoResults.querySelectorAll(".copy-code").forEach((b) => {
+          b.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(b.dataset.code);
+              toast("Crosshair code copied");
+            } catch {
+              toast("Copy failed");
+            }
+          });
+        });
+
+        // Lazy avatar fetch for player rows
+        const sids = Array.from(
+          demoResults.querySelectorAll(".avatar-slot[data-sid]")
+        )
+          .map((el) => el.dataset.sid)
+          .filter(Boolean);
+        if (sids.length) {
+          fetch("/api/steam/avatars", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: sids.join(" ") }),
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (!data) return;
+              const map = {};
+              for (const p of data.results || []) {
+                if (p.steamid && p.avatarfull) map[p.steamid] = p.avatarfull;
+              }
+              demoResults.querySelectorAll(".avatar-slot").forEach((el) => {
+                const url = map[el.dataset.sid];
+                if (url) {
+                  el.style.color = "transparent";
+                  el.innerHTML = `<img src="${escapeHtml(url)}" alt=""
+                                       style="width:100%;height:100%;object-fit:cover" />`;
+                }
+              });
+            })
+            .catch(() => {
+              /* silently ignore — Steam key may be missing */
+            });
+        }
+      }
+
+      parseBtn.addEventListener("click", async () => {
+        if (!selectedFile) return;
+        parseBtn.disabled = true;
+        demoStatus.innerHTML = `<span class="spinner"></span> Parsing… this may take a few seconds.`;
+        demoResults.classList.add("hidden");
+        const fd = new FormData();
+        fd.append("file", selectedFile);
+        try {
+          const res = await fetch("/api/demo/parse", { method: "POST", body: fd });
+          const data = await res.json();
+          if (!res.ok || data.error) {
+            throw new Error(data.error || data.detail || `HTTP ${res.status}`);
+          }
+          renderDemoResults(data);
+          demoStatus.textContent = "Done.";
+        } catch (err) {
+          demoStatus.innerHTML =
+            `<span style="color:var(--danger)">${escapeHtml(err.message)}</span>`;
+        } finally {
+          parseBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
